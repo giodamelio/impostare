@@ -1,0 +1,22 @@
+[[databases]]
+name = "metrics"
+extensions = ["timescaledb"]
+
+[[users]]
+name = "grafana"
+password_file = "${CREDENTIALS_DIRECTORY}/postgres-password-grafana"
+
+[users.permissions]
+metric = [
+  "GRANT SELECT ON ALL TABLES IN SCHEMA public",
+]
+
+[[users]]
+name = "telegraf"
+password_file = "${CREDENTIALS_DIRECTORY}/postgres-password-telegraph"
+
+[users.permissions]
+metric = [
+  "GRANT ALL ON TABLES IN SCHEMA public",
+  "GRANT CREATE ON DATABASE metric",
+]
