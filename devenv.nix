@@ -18,6 +18,9 @@
     extensions = extensions: [
       extensions.timescaledb
     ];
+    initialScript = ''
+      CREATE USER postgres SUPERUSER;
+    '';
     settings.shared_preload_libraries = "timescaledb";
   };
 }

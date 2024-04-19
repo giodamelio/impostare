@@ -5,6 +5,7 @@ use std::fs;
 use anyhow::Result;
 
 use config::Config;
+use postgres::{Client, NoTls};
 
 type Statement = (Option<String>, &'static str, Vec<String>);
 
@@ -13,6 +14,11 @@ fn main() -> Result<()> {
     let config: Config = toml::from_str(&toml_content)?;
 
     println!("{:#?}", config);
+
+    let mut client = Client::connect(
+        "host=/home/giodamelio/projects/impostare/.devenv/run/postgres user=postgres",
+        NoTls,
+    )?;
 
     let mut statements = vec![];
     statements.extend(create_databases(&config));
