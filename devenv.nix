@@ -1,4 +1,4 @@
-_: {
+{pkgs, ...}: {
   languages.nix.enable = true;
   languages.rust.enable = true;
 
@@ -11,4 +11,13 @@ _: {
   enterTest = ''
     cargo test
   '';
+
+  services.postgres = {
+    enable = true;
+    package = pkgs.postgresql_15;
+    extensions = extensions: [
+      extensions.timescaledb
+    ];
+    settings.shared_preload_libraries = "timescaledb";
+  };
 }
