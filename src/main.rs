@@ -15,15 +15,16 @@ fn main() -> Result<()> {
     println!("{:#?}", config);
 
     let mut statements = vec![];
-    statements.extend(create_databases(&config)?);
+    statements.extend(create_databases(&config));
+    statements.extend(load_extensions(&config));
 
-    println!("Statements: {:?}", statements);
+    println!("Statements: {:#?}", statements);
 
     Ok(())
 }
 
-fn create_databases(config: &Config) -> Result<Vec<Statement>> {
-    Ok(config
+fn create_databases(config: &Config) -> Vec<Statement> {
+    config
         .databases
         .iter()
         .map(|db| {
@@ -33,5 +34,21 @@ fn create_databases(config: &Config) -> Result<Vec<Statement>> {
                 vec![db.name.clone()],
             )
         })
-        .collect())
+        .collect()
+}
+
+fn load_extensions(config: &Config) -> Vec<Statement> {
+    config
+        .databases
+        .iter()
+        .flat_map(|db| {
+            db.extensions.iter().map(|ex| {
+                (
+                    Some(db.name.clone()),
+                    "CREATE EXTENSION IF NOT EXISTS $1",
+                    vec![ex.clone()],
+                )
+            })
+        })
+        .collect()
 }

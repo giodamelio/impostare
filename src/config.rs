@@ -11,7 +11,8 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct Database {
     pub name: String,
-    pub extensions: Option<Vec<String>>,
+    #[serde(default)]
+    pub extensions: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
