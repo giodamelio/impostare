@@ -1,6 +1,9 @@
 [[databases]]
 name = "metrics"
-extensions = ["timescaledb"]
+
+[[extensions]]
+name = "timescaledb"
+database = "metrics"
 
 [[users]]
 name = "grafana"
@@ -14,22 +17,24 @@ password_file = "${CREDENTIALS_DIRECTORY}/postgres-password-telegraph"
 role = "telegraf"
 permissions = ["CONNECT"]
 databases = ["metrics"]
-make_default = true
 
 [[schema_permissions]]
 role = "telegraf"
 permissions = ["CREATE"]
-schemas = ["metrics.public"]
+database = "metrics"
+schemas = ["public"]
 make_default = true
 
 [[table_permissions]]
 role = "telegraf"
 permissions = ["ALL"]
+database = "metrics"
 tables = "ALL"
 make_default = true
 
 [[table_permissions]]
 role = "grafana"
 permissions = ["SELECT"]
+database = "metrics"
 tables = "ALL"
 make_default = true
