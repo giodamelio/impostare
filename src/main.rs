@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use anyhow::Result;
-use log::{debug, info, trace};
+use log::{debug, error, info, trace};
 use postgres::{Client, Config as PgConfig, NoTls};
 
 use crate::config::{Config, ToSQLStatements};
@@ -28,12 +28,12 @@ impl DB {
     }
 
     // Get a connection if it exists, otherwise create it first
-    fn connection(&mut self, dbname: Option<String>) -> Result<&mut Client> {
-        Ok(match self.connections.entry(dbname.clone()) {
+    fn connection(&mut self, dbname: Option<&String>) -> Result<&mut Client> {
+        Ok(match self.connections.entry(dbname.cloned()) {
             Entry::Occupied(e) => e.into_mut(),
             Entry::Vacant(e) => {
                 let mut config = self.base_config.clone();
-                if let Some(ref name) = dbname {
+                if let Some(name) = dbname {
                     config.dbname(name);
                 }
                 debug!("Creating connection to database: {:?}", dbname);
@@ -45,14 +45,14 @@ impl DB {
 
     fn execute(
         &mut self,
-        statement: Statement,
+        statement: &Statement,
     ) -> Result<std::result::Result<u64, postgres::Error>> {
         trace!(
             "Executing SQL statement (database: {:?}): {:?}",
             statement.database.clone().unwrap_or("None".to_string()),
             statement.sql,
         );
-        let conn = self.connection(statement.database)?;
+        let conn = self.connection(statement.database.as_ref())?;
         Ok(conn.execute(&statement.sql, &[]))
     }
 }
@@ -77,13 +77,19 @@ fn main() -> Result<()> {
 
     info!("Executing {} statments", statements.len());
 
-    // for statement in statements {
-    //     if let Err(error) = db.execute(statement.clone()?)? {
-    //         if !statement?.is_ignorable_error(&error) {
-    //             return dbg!(Err(error.into()));
-    //         }
-    //     }
-    // }
+    for statement in statements {
+        match statement {
+            Err(err) => error!("Could not build statement: {}", err),
+            Ok(statement) => match db.execute(&statement)? {
+                Err(err) => {
+                    if !statement.is_ignorable_error(&err) {
+                        error!("Statement failed: {}", statement.sql);
+                    }
+                }
+                Ok(_) => info!("Statement succeded: {}", statement.sql),
+            },
+        };
+    }
 
     Ok(())
 }
