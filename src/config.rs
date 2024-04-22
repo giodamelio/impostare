@@ -1,114 +1,93 @@
+use anyhow::Result;
+use postgres::error::SqlState;
 use serde::{Deserialize, Deserializer};
 
-#[derive(Debug, PartialEq)]
-pub struct Statement {
-    database: Option<String>,
-    sql: String,
-}
-
-impl Statement {
-    fn create<S: Into<Statement>>(statement: S) -> Self {
-        statement.into()
-    }
-}
-
-impl From<(String, String)> for Statement {
-    fn from((db, sql): (String, String)) -> Self {
-        Self {
-            database: Some(db),
-            sql,
-        }
-    }
-}
-
-impl From<(&str, &str)> for Statement {
-    fn from((db, sql): (&str, &str)) -> Self {
-        Self {
-            database: Some(db.to_string()),
-            sql: sql.to_string(),
-        }
-    }
-}
-
-impl From<String> for Statement {
-    fn from(value: String) -> Self {
-        Self {
-            database: None,
-            sql: value,
-        }
-    }
-}
-
-impl From<&str> for Statement {
-    fn from(value: &str) -> Self {
-        Self {
-            database: None,
-            sql: value.to_string(),
-        }
-    }
-}
+use crate::statement::{Statement, Statements};
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
-    databases: Vec<Database>,
-    extensions: Vec<Extension>,
-    users: Vec<User>,
-    database_permissions: Vec<DatabasePermission>,
-    schema_permissions: Vec<SchemaPermission>,
-    table_permissions: Vec<TablePermission>,
+    pub databases: Vec<Database>,
+    pub extensions: Vec<Extension>,
+    pub users: Vec<User>,
+    pub database_permissions: Vec<DatabasePermission>,
+    pub schema_permissions: Vec<SchemaPermission>,
+    pub table_permissions: Vec<TablePermission>,
 }
 
 #[derive(Deserialize, Debug)]
-struct Database {
+pub struct Database {
     name: String,
 }
 
 impl ToSQLStatements for Database {
-    fn to_sql_statements(self) -> Vec<Statement> {
-        vec![format!("CREATE DATABASE {};", self.name).into()]
+    fn to_sql_statements(&self) -> Statements {
+        vec![Statement {
+            database: None,
+            sql: format!("CREATE DATABASE {};", self.name),
+            ignorable_errors: vec![SqlState::DUPLICATE_DATABASE],
+        }]
+        .into()
     }
 }
 
 #[derive(Deserialize, Debug)]
-struct Extension {
+pub struct Extension {
     name: String,
     database: String,
 }
 
 impl ToSQLStatements for Extension {
-    fn to_sql_statements(self) -> Vec<Statement> {
+    fn to_sql_statements(&self) -> Statements {
         vec![Statement {
-            database: Some(self.database),
+            database: Some(self.database.clone()),
             sql: format!("CREATE EXTENSION IF NOT EXISTS {};", self.name),
+            ignorable_errors: vec![],
         }]
+        .into()
     }
 }
 
 #[derive(Deserialize, Debug)]
 pub struct User {
     name: String,
-    password_file: String,
+    systemd_password_credential: Option<String>,
 }
 
 impl ToSQLStatements for User {
-    fn to_sql_statements(self) -> Vec<Statement> {
-        vec![format!("CREATE USER {};", self.name).into()]
+    fn to_sql_statements(&self) -> Statements {
+        let mut statements = vec![];
+
+        statements.push(Statement {
+            database: None,
+            sql: format!("CREATE USER {};", self.name),
+            ignorable_errors: vec![SqlState::DUPLICATE_OBJECT],
+        });
+
+        if self.systemd_password_credential.is_some() {
+            statements.push(Statement {
+                database: None,
+                sql: format!("ALTER USER {} WITH PASSWORD '{}';", self.name, ""),
+                ignorable_errors: vec![],
+            });
+        }
+
+        statements.into()
     }
 }
 
 #[derive(Deserialize, Debug)]
-struct DatabasePermission {
+pub struct DatabasePermission {
     role: String,
     permissions: Vec<String>,
     databases: Vec<String>,
 }
 
 impl ToSQLStatements for DatabasePermission {
-    fn to_sql_statements(self) -> Vec<Statement> {
+    fn to_sql_statements(&self) -> Statements {
         let mut statements = vec![];
 
-        for database in self.databases {
-            statements.push(Statement {
+        for database in self.databases.clone() {
+            statements.push(Ok(Statement {
                 database: Some(database.clone()),
                 sql: format!(
                     "GRANT {} ON DATABASE {} TO {};",
@@ -116,15 +95,16 @@ impl ToSQLStatements for DatabasePermission {
                     database,
                     self.role
                 ),
-            });
+                ignorable_errors: vec![],
+            }));
         }
 
-        statements
+        statements.into()
     }
 }
 
 #[derive(Deserialize, Debug)]
-struct SchemaPermission {
+pub struct SchemaPermission {
     role: String,
     permissions: Vec<String>,
     database: String,
@@ -133,10 +113,10 @@ struct SchemaPermission {
 }
 
 impl ToSQLStatements for SchemaPermission {
-    fn to_sql_statements(self) -> Vec<Statement> {
+    fn to_sql_statements(&self) -> Statements {
         let mut statements = vec![];
 
-        for schema in self.schemas {
+        for schema in self.schemas.clone() {
             statements.push(Statement {
                 database: Some(self.database.clone()),
                 sql: format!(
@@ -145,6 +125,7 @@ impl ToSQLStatements for SchemaPermission {
                     schema,
                     self.role
                 ),
+                ignorable_errors: vec![],
             });
 
             if self.make_default {
@@ -155,16 +136,17 @@ impl ToSQLStatements for SchemaPermission {
                         self.permissions.join(", "),
                         self.role
                     ),
+                    ignorable_errors: vec![],
                 });
             }
         }
 
-        statements
+        statements.into()
     }
 }
 
 #[derive(Deserialize, Debug)]
-struct TablePermission {
+pub struct TablePermission {
     role: String,
     permissions: Vec<String>,
     database: String,
@@ -173,10 +155,10 @@ struct TablePermission {
 }
 
 impl ToSQLStatements for TablePermission {
-    fn to_sql_statements(self) -> Vec<Statement> {
+    fn to_sql_statements(&self) -> Statements {
         let mut statements = vec![];
 
-        let tables_string = match self.tables {
+        let tables_string = match self.tables.clone() {
             // TODO: I know this shouldn't be hardcoded
             Tables::All => "ALL IN SCHEMA public".to_string(),
             Tables::List(tables) => format!("TABLE {}", tables.join(", ")),
@@ -190,6 +172,7 @@ impl ToSQLStatements for TablePermission {
                 tables_string,
                 self.role
             ),
+            ignorable_errors: vec![],
         });
 
         if self.make_default {
@@ -200,16 +183,17 @@ impl ToSQLStatements for TablePermission {
                     self.permissions.join(", "),
                     self.role
                 ),
+                ignorable_errors: vec![],
             });
         }
 
-        statements
+        statements.into()
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-enum Tables {
+pub enum Tables {
     #[serde(deserialize_with = "all")]
     All,
     List(Vec<String>),
@@ -229,23 +213,69 @@ where
     Helper::deserialize(deserializer).map(|_| ())
 }
 
-trait ToSQLStatements {
-    fn to_sql_statements(self) -> Vec<Statement>;
+pub trait ToSQLStatements {
+    fn to_sql_statements(&self) -> Statements;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn create_statement(
+        database: Option<&'static str>,
+        sql: &'static str,
+        ignorable_errors: Vec<SqlState>,
+    ) -> Statement {
+        Statement {
+            database: database.map(|name| name.to_string()),
+            sql: sql.to_string(),
+            ignorable_errors,
+        }
+    }
+
+    fn has_statement(statement: Statement, statements: Statements) {
+        let has_it = statements.iter().any(|st| match st {
+            Err(_) => false,
+            Ok(s) => *s == statement,
+        });
+
+        assert!(
+            has_it,
+            "{:#?} does not contain {:#?}",
+            statements, statement
+        )
+    }
+
     #[test]
-    fn test_serialize_database() {
+    fn test_is_ignoreable_error() {
+        let statement = Statement {
+            database: None,
+            sql: "".into(),
+            ignorable_errors: vec![SqlState::DUPLICATE_DATABASE],
+        };
+
+        // I know this is a little nasty,
+        // there is no other way to create a postgres::Error publicly(ish)
+        let error = postgres::Error::__private_api_timeout();
+        assert!(!statement.is_ignorable_error(&error));
+    }
+
+    #[test]
+    fn test_serialize_database() -> Result<()> {
         let db = Database {
             name: "hello".to_string(),
         };
-        assert_eq!(
+
+        has_statement(
+            create_statement(
+                None,
+                "CREATE DATABASE hello;",
+                vec![SqlState::DUPLICATE_DATABASE],
+            ),
             db.to_sql_statements(),
-            vec![Statement::create("CREATE DATABASE hello;")],
         );
+
+        Ok(())
     }
 
     #[test]
@@ -254,12 +284,14 @@ mod tests {
             name: "timescaledb".to_string(),
             database: "metrics".to_string(),
         };
-        assert_eq!(
+
+        has_statement(
+            create_statement(
+                Some("metrics"),
+                "CREATE EXTENSION IF NOT EXISTS timescaledb;",
+                vec![],
+            ),
             ex.to_sql_statements(),
-            vec![Statement::create((
-                "metrics",
-                "CREATE EXTENSION IF NOT EXISTS timescaledb;"
-            ))]
         );
     }
 
@@ -267,11 +299,15 @@ mod tests {
     fn test_serialize_user() {
         let user = User {
             name: "grafana".to_string(),
-            password_file: "/a/file".to_string(),
+            systemd_password_credential: Some("whisper-whisper".to_string()),
         };
-        assert_eq!(
+        has_statement(
+            create_statement(
+                None,
+                "CREATE USER grafana;",
+                vec![SqlState::DUPLICATE_OBJECT],
+            ),
             user.to_sql_statements(),
-            vec![Statement::create("CREATE USER grafana;")]
         );
     }
 
@@ -282,12 +318,21 @@ mod tests {
             permissions: vec!["CONNECT".to_string()],
             databases: vec!["db1".to_string(), "db2".to_string()],
         };
-        assert_eq!(
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT CONNECT ON DATABASE db1 TO telegraf;",
+                vec![],
+            ),
             dbp.to_sql_statements(),
-            vec![
-                Statement::create(("db1", "GRANT CONNECT ON DATABASE db1 TO telegraf;")),
-                Statement::create(("db2", "GRANT CONNECT ON DATABASE db2 TO telegraf;")),
-            ]
+        );
+        has_statement(
+            create_statement(
+                Some("db2"),
+                "GRANT CONNECT ON DATABASE db2 TO telegraf;",
+                vec![],
+            ),
+            dbp.to_sql_statements(),
         );
     }
 
@@ -300,12 +345,21 @@ mod tests {
             schemas: vec!["public".to_string(), "other".to_string()],
             make_default: false,
         };
-        assert_eq!(
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT CREATE ON SCHEMA public TO telegraf;",
+                vec![],
+            ),
             sp.to_sql_statements(),
-            vec![
-                Statement::create(("db1", "GRANT CREATE ON SCHEMA public TO telegraf;")),
-                Statement::create(("db1", "GRANT CREATE ON SCHEMA other TO telegraf;")),
-            ]
+        );
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT CREATE ON SCHEMA other TO telegraf;",
+                vec![],
+            ),
+            sp.to_sql_statements(),
         );
 
         let sp2 = SchemaPermission {
@@ -315,20 +369,37 @@ mod tests {
             schemas: vec!["public".to_string(), "other".to_string()],
             make_default: true,
         };
-        assert_eq!(
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT CREATE, USAGE ON SCHEMA public TO telegraf;",
+                vec![],
+            ),
             sp2.to_sql_statements(),
-            vec![
-                Statement::create(("db1", "GRANT CREATE, USAGE ON SCHEMA public TO telegraf;")),
-                Statement::create((
-                    "db1",
-                    "ALTER DEFAULT PRIVILEGES GRANT CREATE, USAGE ON SCHEMAS TO telegraf;"
-                )),
-                Statement::create(("db1", "GRANT CREATE, USAGE ON SCHEMA other TO telegraf;")),
-                Statement::create((
-                    "db1",
-                    "ALTER DEFAULT PRIVILEGES GRANT CREATE, USAGE ON SCHEMAS TO telegraf;"
-                )),
-            ]
+        );
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "ALTER DEFAULT PRIVILEGES GRANT CREATE, USAGE ON SCHEMAS TO telegraf;",
+                vec![],
+            ),
+            sp2.to_sql_statements(),
+        );
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT CREATE, USAGE ON SCHEMA other TO telegraf;",
+                vec![],
+            ),
+            sp2.to_sql_statements(),
+        );
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "ALTER DEFAULT PRIVILEGES GRANT CREATE, USAGE ON SCHEMAS TO telegraf;",
+                vec![],
+            ),
+            sp2.to_sql_statements(),
         );
     }
 
@@ -341,15 +412,21 @@ mod tests {
             tables: Tables::All,
             make_default: true,
         };
-        assert_eq!(
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT SELECT ON ALL IN SCHEMA public TO telegraf;",
+                vec![],
+            ),
             tp.to_sql_statements(),
-            vec![
-                Statement::create(("db1", "GRANT SELECT ON ALL IN SCHEMA public TO telegraf;")),
-                Statement::create((
-                    "db1",
-                    "ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO telegraf;"
-                )),
-            ]
+        );
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO telegraf;",
+                vec![],
+            ),
+            tp.to_sql_statements(),
         );
 
         let tp2 = TablePermission {
@@ -359,18 +436,21 @@ mod tests {
             tables: Tables::List(vec!["table1".to_string(), "table2".to_string()]),
             make_default: true,
         };
-        assert_eq!(
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "GRANT SELECT, UPDATE ON TABLE table1, table2 TO grafana;",
+                vec![],
+            ),
             tp2.to_sql_statements(),
-            vec![
-                Statement::create((
-                    "db1",
-                    "GRANT SELECT, UPDATE ON TABLE table1, table2 TO grafana;"
-                )),
-                Statement::create((
-                    "db1",
-                    "ALTER DEFAULT PRIVILEGES GRANT SELECT, UPDATE ON TABLES TO grafana;"
-                )),
-            ]
+        );
+        has_statement(
+            create_statement(
+                Some("db1"),
+                "ALTER DEFAULT PRIVILEGES GRANT SELECT, UPDATE ON TABLES TO grafana;",
+                vec![],
+            ),
+            tp2.to_sql_statements(),
         );
     }
 }

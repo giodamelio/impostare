@@ -7,11 +7,11 @@ database = "metrics"
 
 [[users]]
 name = "grafana"
-password_file = "${CREDENTIALS_DIRECTORY}/postgres-password-grafana"
+systemd_password_credential = "postgres-password-grafana"
 
 [[users]]
 name = "telegraf"
-password_file = "${CREDENTIALS_DIRECTORY}/postgres-password-telegraph"
+systemd_password_credential = "postgres-password-telegraf"
 
 [[database_permissions]]
 role = "telegraf"
