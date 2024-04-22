@@ -21,6 +21,21 @@ impl ToSQLStatements for Config {
         statements.extend(self.databases.iter().flat_map(|db| db.to_sql_statements()));
         statements.extend(self.extensions.iter().flat_map(|ex| ex.to_sql_statements()));
         statements.extend(self.users.iter().flat_map(|user| user.to_sql_statements()));
+        statements.extend(
+            self.database_permissions
+                .iter()
+                .flat_map(|dp| dp.to_sql_statements()),
+        );
+        statements.extend(
+            self.schema_permissions
+                .iter()
+                .flat_map(|sp| sp.to_sql_statements()),
+        );
+        statements.extend(
+            self.table_permissions
+                .iter()
+                .flat_map(|tp| tp.to_sql_statements()),
+        );
 
         statements
     }
@@ -181,7 +196,7 @@ impl ToSQLStatements for TablePermission {
 
         let tables_string = match self.tables.clone() {
             // TODO: I know this shouldn't be hardcoded
-            Tables::All => "ALL IN SCHEMA public".to_string(),
+            Tables::All => "ALL TABLES IN SCHEMA public".to_string(),
             Tables::List(tables) => format!("TABLE {}", tables.join(", ")),
         };
 
@@ -330,6 +345,7 @@ mod tests {
             ),
             user.to_sql_statements(),
         );
+        assert!(user.to_sql_statements()[1].is_err());
     }
 
     #[test]
@@ -436,7 +452,7 @@ mod tests {
         has_statement(
             create_statement(
                 Some("db1"),
-                "GRANT SELECT ON ALL IN SCHEMA public TO telegraf;",
+                "GRANT SELECT ON ALL TABLES IN SCHEMA public TO telegraf;",
                 vec![],
             ),
             tp.to_sql_statements(),
