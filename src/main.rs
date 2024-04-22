@@ -58,7 +58,9 @@ impl DB {
 }
 
 fn main() -> Result<()> {
-    pretty_env_logger::try_init()?;
+    pretty_env_logger::formatted_builder()
+        .filter(Some("impostare"), log::LevelFilter::Info)
+        .init();
 
     let toml_content = fs::read_to_string("db.toml")?;
     let config: Config = toml::from_str(&toml_content)?;
