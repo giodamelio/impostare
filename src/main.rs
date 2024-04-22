@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use anyhow::Result;
+use argh::FromArgs;
 use log::{debug, error, info, trace};
 use postgres::{Client, Config as PgConfig, NoTls};
 
@@ -19,7 +20,7 @@ struct DB {
 }
 
 impl DB {
-    fn connect(params: &str, dry_run: bool) -> Result<Self> {
+    fn connect(params: String, dry_run: bool) -> Result<Self> {
         Ok(Self {
             connections: HashMap::new(),
             base_config: params.parse()?,
@@ -57,19 +58,35 @@ impl DB {
     }
 }
 
+#[derive(Debug, FromArgs)]
+/// Simple CLI to allow setting up PostgreSQL Databases, Users and Permissions declaratively
+struct Args {
+    #[argh(positional)]
+    /// file with PostgreSQL connection string
+    connection_string_file: std::path::PathBuf,
+
+    #[argh(positional)]
+    /// file the impostare config
+    config_file: std::path::PathBuf,
+}
+
 fn main() -> Result<()> {
+    // Setup the logging
     pretty_env_logger::formatted_builder()
         .filter(Some("impostare"), log::LevelFilter::Info)
         .init();
 
-    let toml_content = fs::read_to_string("db.toml")?;
+    // Parse the CLI args
+    let args: Args = argh::from_env();
+    info!("CLI Args: {:#?}", args);
+
+    // Read the config
+    let toml_content = fs::read_to_string(args.config_file)?;
     let config: Config = toml::from_str(&toml_content)?;
     trace!("Full config: {:#?}", config);
 
-    let mut db = DB::connect(
-        "host=/home/giodamelio/projects/impostare/.devenv/run/postgres user=postgres",
-        false,
-    )?;
+    // Setup the DB connection multiplexer
+    let mut db = DB::connect(std::fs::read_to_string(args.connection_string_file)?, false)?;
 
     let statements = config.to_sql_statements();
 
