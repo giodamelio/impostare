@@ -1,4 +1,4 @@
-{pkgs, ...}: {
+{pkgs, lib, ...}: {
   languages.nix.enable = true;
   languages.rust.enable = true;
 
@@ -23,4 +23,10 @@
     '';
     settings.shared_preload_libraries = "timescaledb";
   };
+
+  packages = lib.optionals
+    pkgs.stdenv.isDarwin 
+    (with pkgs.darwin.apple_sdk; [
+		  frameworks.CoreFoundation
+    ]);
 }
