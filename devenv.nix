@@ -28,5 +28,7 @@
     pkgs.stdenv.isDarwin 
     (with pkgs.darwin.apple_sdk; [
 		  frameworks.CoreFoundation
+      frameworks.Security
+      frameworks.SystemConfiguration
     ]);
 }
