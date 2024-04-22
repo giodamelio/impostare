@@ -10,7 +10,7 @@ use log::{debug, error, info, trace};
 use postgres::{Client, Config as PgConfig, NoTls};
 
 use crate::config::{Config, ToSQLStatements};
-use crate::statement::{Statement, Statements};
+use crate::statement::Statement;
 
 struct DB {
     connections: HashMap<Option<String>, Client>,
@@ -69,11 +69,7 @@ fn main() -> Result<()> {
         false,
     )?;
 
-    let mut statements = Statements::new();
-
-    statements.extend(create_databases(&config));
-    statements.extend(load_extensions(&config));
-    statements.extend(create_users(&config));
+    let statements = config.to_sql_statements();
 
     info!("Executing {} statments", statements.len());
 
@@ -92,28 +88,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn create_databases(config: &Config) -> Statements {
-    config
-        .databases
-        .iter()
-        .flat_map(|db| db.to_sql_statements())
-        .collect()
-}
-
-fn load_extensions(config: &Config) -> Statements {
-    config
-        .extensions
-        .iter()
-        .flat_map(|ex| ex.to_sql_statements())
-        .collect()
-}
-
-fn create_users(config: &Config) -> Statements {
-    config
-        .users
-        .iter()
-        .flat_map(|user| user.to_sql_statements())
-        .collect()
 }

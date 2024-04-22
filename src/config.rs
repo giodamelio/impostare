@@ -14,6 +14,18 @@ pub struct Config {
     pub table_permissions: Vec<TablePermission>,
 }
 
+impl ToSQLStatements for Config {
+    fn to_sql_statements(&self) -> Statements {
+        let mut statements = Statements::new();
+
+        statements.extend(self.databases.iter().flat_map(|db| db.to_sql_statements()));
+        statements.extend(self.extensions.iter().flat_map(|ex| ex.to_sql_statements()));
+        statements.extend(self.users.iter().flat_map(|user| user.to_sql_statements()));
+
+        statements
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Database {
     name: String,
