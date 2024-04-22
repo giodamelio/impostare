@@ -69,25 +69,31 @@ impl ToSQLStatements for User {
     fn to_sql_statements(&self) -> Statements {
         let mut statements = vec![];
 
-        statements.push(Statement {
+        statements.push(Ok(Statement {
             database: None,
             sql: format!("CREATE USER {};", self.name),
             ignorable_errors: vec![SqlState::DUPLICATE_OBJECT],
-        });
+        }));
 
-        if self.systemd_password_credential.is_some() {
-            statements.push(Statement {
-                database: None,
-                sql: format!(
-                    "ALTER USER {} WITH PASSWORD '{}';",
-                    self.name, "super_secret_password"
-                ),
-                ignorable_errors: vec![],
-            });
+        if let Some(ref cred_name) = self.systemd_password_credential {
+            statements.push(
+                get_systemd_cred(cred_name.clone()).map(|password| Statement {
+                    database: None,
+                    sql: format!("ALTER USER {} WITH PASSWORD '{}';", self.name, password),
+                    ignorable_errors: vec![],
+                }),
+            );
         }
 
         statements.into()
     }
+}
+
+fn get_systemd_cred(name: String) -> Result<String> {
+    let creds_dir = std::env::var("CREDENTIALS_DIRECTORY")?;
+    let mut creds_path = std::path::PathBuf::from(creds_dir);
+    creds_path.push(name);
+    Ok(std::fs::read_to_string(creds_path)?)
 }
 
 #[derive(Deserialize, Debug)]
