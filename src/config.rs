@@ -78,7 +78,10 @@ impl ToSQLStatements for User {
         if self.systemd_password_credential.is_some() {
             statements.push(Statement {
                 database: None,
-                sql: format!("ALTER USER {} WITH PASSWORD '{}';", self.name, ""),
+                sql: format!(
+                    "ALTER USER {} WITH PASSWORD '{}';",
+                    self.name, "super_secret_password"
+                ),
                 ignorable_errors: vec![],
             });
         }

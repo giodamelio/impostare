@@ -19,6 +19,36 @@ impl Statement {
     }
 }
 
+// Erase the insides of single quoted strings so we don't display secrets
+impl std::fmt::Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut in_string = false;
+        for char in self.sql.chars() {
+            // Start of string
+            if char == '\'' && !in_string {
+                in_string = true;
+                write!(f, "'...'")?;
+                continue;
+            }
+
+            // End of string
+            if char == '\'' && in_string {
+                in_string = false;
+                continue;
+            }
+
+            // Inside of string
+            if in_string {
+                continue;
+            }
+
+            write!(f, "{}", char)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct Statements(Vec<Result<Statement>>);
 

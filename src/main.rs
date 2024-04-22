@@ -48,9 +48,9 @@ impl DB {
         statement: &Statement,
     ) -> Result<std::result::Result<u64, postgres::Error>> {
         trace!(
-            "Executing SQL statement (database: {:?}): {:?}",
+            "Executing SQL statement (database: {:?}): {}",
             statement.database.clone().unwrap_or("None".to_string()),
-            statement.sql,
+            statement,
         );
         let conn = self.connection(statement.database.as_ref())?;
         Ok(conn.execute(&statement.sql, &[]))
@@ -79,10 +79,10 @@ fn main() -> Result<()> {
             Ok(statement) => match db.execute(&statement)? {
                 Err(err) => {
                     if !statement.is_ignorable_error(&err) {
-                        error!("Statement failed: {}", statement.sql);
+                        error!("Statement failed: {}", statement);
                     }
                 }
-                Ok(_) => info!("Statement succeded: {}", statement.sql),
+                Ok(_) => info!("Statement succeded: {}", statement),
             },
         };
     }
