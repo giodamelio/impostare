@@ -13,3 +13,5 @@ devenv.local.nix
 
 # Nix output
 result
+
+.nixos-test-history
