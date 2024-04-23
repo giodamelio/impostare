@@ -36,7 +36,7 @@
                 };
                 script = ''
                   mkdir -p /usr/lib/credstore.encrypted
-                  echo -n "haha123" | systemd-creds encrypt - /usr/lib/credstore.encrypted/postgres-password
+                  echo "haha123" | systemd-creds encrypt - /usr/lib/credstore.encrypted/postgres-password
                 '';
               };
 

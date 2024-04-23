@@ -114,7 +114,8 @@ fn get_systemd_cred(name: String) -> Result<String> {
     let creds_dir = std::env::var("CREDENTIALS_DIRECTORY")?;
     let mut creds_path = std::path::PathBuf::from(creds_dir);
     creds_path.push(name);
-    Ok(std::fs::read_to_string(creds_path)?)
+    let raw_password = std::fs::read_to_string(creds_path)?;
+    Ok(raw_password.trim().to_string())
 }
 
 #[derive(Deserialize, Debug)]
