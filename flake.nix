@@ -22,6 +22,22 @@
             nodes.machine = { config, pkgs, ... }: {
               services.postgresql = {
                 enable = true;
+                authentication = pkgs.lib.mkAfter ''
+                  host all all all scram-sha-256
+                '';
+              };
+
+              systemd.services.set-encrypted-secret = {
+                enable = true;
+                wantedBy = ["default.target"];
+                before = ["postgresql.service"];
+                serviceConfig = {
+                  Type = "oneshot";
+                };
+                script = ''
+                  mkdir -p /usr/lib/credstore.encrypted
+                  echo -n "haha123" | systemd-creds encrypt - /usr/lib/credstore.encrypted/postgres-password
+                '';
               };
 
               environment.etc.connection-details.text = ''
@@ -37,6 +53,15 @@
 
                 [[users]]
                 name = "root"
+
+                [[users]]
+                name = "user1"
+                systemd_password_credential = "postgres-password"
+
+                [[database_permissions]]
+                role = "user1"
+                permissions = ["CONNECT"]
+                databases = ["db1"]
               '';
 
               systemd.services.impostare = {
@@ -47,6 +72,7 @@
                 serviceConfig = {
                   Type = "oneshot";
                   User = "postgres";
+                  LoadCredentialEncrypted = "postgres-password";
                 };
                 script = ''
                   ${self'.packages.impostare}/bin/impostare \
@@ -60,11 +86,15 @@
 
             testScript = ''
               machine.wait_for_unit("default.target")
+              machine.wait_for_file("/usr/lib/credstore.encrypted/postgres-password")
               machine.wait_for_open_port(5432)
 
               # Make sure the databases exist
               machine.succeed("psql -lqt | grep db1")
               machine.succeed("psql -lqt | grep db2")
+
+              # Try to connect with the set password
+              machine.succeed("psql postgresql://user1:haha123@localhost/db1 -c 'SELECT 1;'")
             '';
           };
         };
