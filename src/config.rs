@@ -6,11 +6,17 @@ use crate::statement::{Statement, Statements};
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
+    #[serde(default)]
     pub databases: Vec<Database>,
+    #[serde(default)]
     pub extensions: Vec<Extension>,
+    #[serde(default)]
     pub users: Vec<User>,
+    #[serde(default)]
     pub database_permissions: Vec<DatabasePermission>,
+    #[serde(default)]
     pub schema_permissions: Vec<SchemaPermission>,
+    #[serde(default)]
     pub table_permissions: Vec<TablePermission>,
 }
 
