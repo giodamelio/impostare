@@ -15,6 +15,19 @@
           src = ./.;
           cargoHash = "sha256-+GCZM0YoRM+0XqlX9cZwY1LjWTBWD2zW4AQgst86jck=";
         };
+        checks = {
+          helloWorld = pkgs.nixosTest {
+            name = "hello-world";
+
+            nodes.machine = { config, pkgs, ... }: {
+              system.stateVersion = "23.11";
+            };
+
+            testScript = ''
+              machine.wait_for_unit("default.target")
+            '';
+          };
+        };
       };
       flake = {};
     };
